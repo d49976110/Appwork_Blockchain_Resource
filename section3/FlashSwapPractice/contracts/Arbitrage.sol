@@ -64,7 +64,6 @@ contract Arbitrage is IUniswapV2Callee, Ownable {
         (uint112 higherPoolReserve0, uint112 higherPoolReserve1,) = IUniswapV2Pair(priceHigherPool).getReserves();
 
         uint256 debtAmount = _getAmountIn(borrowETH, uint256(lowerPoolReserve1), uint256(lowerPoolReserve0));
-
         uint256 debtAmountOut = _getAmountOut(borrowETH, uint256(higherPoolReserve0), uint256(higherPoolReserve1));
 
         bytes memory data = abi.encode(
