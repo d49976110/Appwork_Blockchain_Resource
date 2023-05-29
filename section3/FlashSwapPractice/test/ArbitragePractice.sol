@@ -2,8 +2,8 @@
 pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
-import { Arbitrage } from "../contracts/Arbitrage.sol";
-import { FlashSwapSetUp } from "./helper/FlashSwapSetUp.sol";
+import {Arbitrage} from "../contracts/Arbitrage.sol";
+import {FlashSwapSetUp} from "./helper/FlashSwapSetUp.sol";
 
 contract ArbitragePracticeTest is FlashSwapSetUp {
     Arbitrage public arbitrage;
@@ -20,24 +20,14 @@ contract ArbitragePracticeTest is FlashSwapSetUp {
         vm.startPrank(maker);
         // maker provide 50 ETH, 4000 USDC to wethUsdcPool
         usdc.approve(address(uniswapV2Router), 4_000 * 10 ** usdc.decimals());
-        uniswapV2Router.addLiquidityETH{ value: 50 ether }(
-            address(usdc),
-            4_000 * 10 ** usdc.decimals(),
-            0,
-            0,
-            maker,
-            block.timestamp
+        uniswapV2Router.addLiquidityETH{value: 50 ether}(
+            address(usdc), 4_000 * 10 ** usdc.decimals(), 0, 0, maker, block.timestamp
         );
 
         // maker provide 50 ETH, 6000 USDC to wethUsdcSushiPool
         usdc.approve(address(sushiSwapV2Router), 6_000 * 10 ** usdc.decimals());
-        sushiSwapV2Router.addLiquidityETH{ value: 50 ether }(
-            address(usdc),
-            6_000 * 10 ** usdc.decimals(),
-            0,
-            0,
-            maker,
-            block.timestamp
+        sushiSwapV2Router.addLiquidityETH{value: 50 ether}(
+            address(usdc), 6_000 * 10 ** usdc.decimals(), 0, 0, maker, block.timestamp
         );
         vm.stopPrank();
 

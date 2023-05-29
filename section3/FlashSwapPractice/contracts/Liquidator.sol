@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IUniswapV2Pair } from "v2-core/interfaces/IUniswapV2Pair.sol";
-import { IUniswapV2Callee } from "v2-core/interfaces/IUniswapV2Callee.sol";
-import { IUniswapV2Factory } from "v2-core/interfaces/IUniswapV2Factory.sol";
-import { IUniswapV2Router01 } from "v2-periphery/interfaces/IUniswapV2Router01.sol";
-import { IWETH } from "v2-periphery/interfaces/IWETH.sol";
-import { IFakeLendingProtocol } from "./interfaces/IFakeLendingProtocol.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IUniswapV2Pair} from "v2-core/interfaces/IUniswapV2Pair.sol";
+import {IUniswapV2Callee} from "v2-core/interfaces/IUniswapV2Callee.sol";
+import {IUniswapV2Factory} from "v2-core/interfaces/IUniswapV2Factory.sol";
+import {IUniswapV2Router01} from "v2-periphery/interfaces/IUniswapV2Router01.sol";
+import {IWETH} from "v2-periphery/interfaces/IWETH.sol";
+import {IFakeLendingProtocol} from "./interfaces/IFakeLendingProtocol.sol";
+import "v2-periphery/libraries/UniswapV2Library.sol";
+import "forge-std/console.sol";
 
 // This is liquidator contrac for testing,
 // all you need to implement is flash swap from uniswap pool and call lending protocol liquidate function in uniswapV2Call
@@ -26,6 +28,7 @@ contract Liquidator is IUniswapV2Callee, Ownable {
     address internal immutable _UNISWAP_FACTORY;
     address internal immutable _WETH9;
     uint256 internal constant _MINIMUM_PROFIT = 0.01 ether;
+    address _USDC;
 
     constructor(address lendingProtocol, address uniswapRouter, address uniswapFactory) {
         _FAKE_LENDING_PROTOCOL = lendingProtocol;
@@ -37,9 +40,8 @@ contract Liquidator is IUniswapV2Callee, Ownable {
     //
     // EXTERNAL NON-VIEW ONLY OWNER
     //
-
     function withdraw() external onlyOwner {
-        (bool success, ) = msg.sender.call{ value: address(this).balance }("");
+        (bool success,) = msg.sender.call{value: address(this).balance}("");
         require(success, "Withdraw failed");
     }
 
@@ -50,15 +52,24 @@ contract Liquidator is IUniswapV2Callee, Ownable {
     //
     // EXTERNAL NON-VIEW
     //
-
     function uniswapV2Call(address sender, uint256 amount0, uint256 amount1, bytes calldata data) external override {
         require(sender == address(this), "Sender must be this contract");
         require(amount0 > 0 || amount1 > 0, "amount0 or amount1 must be greater than 0");
-
         // 4. decode callback data
+        CallbackData memory callbackData = abi.decode(data, (CallbackData));
+
         // 5. call liquidate
+        IERC20(callbackData.tokenOut).approve(_FAKE_LENDING_PROTOCOL, type(uint256).max);
+        IFakeLendingProtocol(_FAKE_LENDING_PROTOCOL).liquidatePotision();
+
         // 6. deposit ETH to WETH9, because we will get ETH from lending protocol
+
+        uint256 ethBalance = address(this).balance;
+
+        IWETH(_WETH9).deposit{value: callbackData.amountIn}();
+        uint256 WETHBalance = IWETH(_WETH9).balanceOf(address(this));
         // 7. repay WETH to uniswap pool
+        IERC20(_WETH9).transfer(msg.sender, callbackData.amountIn);
 
         // check profit
         require(address(this).balance >= _MINIMUM_PROFIT, "Profit must be greater than 0.01 ether");
@@ -68,8 +79,17 @@ contract Liquidator is IUniswapV2Callee, Ownable {
     function liquidate(address[] calldata path, uint256 amountOut) external {
         require(amountOut > 0, "AmountOut must be greater than 0");
         // 1. get uniswap pool address
+        address poolAddress = IUniswapV2Factory(_UNISWAP_FACTORY).getPair(path[0], path[1]);
+        require(poolAddress != address(0), "Pool not found");
+
         // 2. calculate repay amount
+        uint256[] memory amounts = UniswapV2Library.getAmountsIn(_UNISWAP_FACTORY, amountOut, path);
+
         // 3. flash swap from uniswap pool
+        bytes memory data =
+            abi.encode(CallbackData({tokenIn: path[0], tokenOut: path[1], amountIn: amounts[0], amountOut: amounts[1]}));
+
+        IUniswapV2Pair(poolAddress).swap(0, amounts[1], address(this), data);
     }
 
     receive() external payable {}

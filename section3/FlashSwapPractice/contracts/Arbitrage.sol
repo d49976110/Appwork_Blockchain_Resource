@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IUniswapV2Pair } from "v2-core/interfaces/IUniswapV2Pair.sol";
-import { IUniswapV2Callee } from "v2-core/interfaces/IUniswapV2Callee.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IUniswapV2Pair} from "v2-core/interfaces/IUniswapV2Pair.sol";
+import {IUniswapV2Callee} from "v2-core/interfaces/IUniswapV2Callee.sol";
+import "forge-std/console.sol";
 
 // This is a pracitce contract for flash swap arbitrage
 contract Arbitrage is IUniswapV2Callee, Ownable {
@@ -21,9 +22,8 @@ contract Arbitrage is IUniswapV2Callee, Ownable {
     //
     // EXTERNAL NON-VIEW ONLY OWNER
     //
-
     function withdraw() external onlyOwner {
-        (bool success, ) = msg.sender.call{ value: address(this).balance }("");
+        (bool success,) = msg.sender.call{value: address(this).balance}("");
         require(success, "Withdraw failed");
     }
 
@@ -34,14 +34,19 @@ contract Arbitrage is IUniswapV2Callee, Ownable {
     //
     // EXTERNAL NON-VIEW
     //
-
     function uniswapV2Call(address sender, uint256 amount0, uint256 amount1, bytes calldata data) external override {
         require(sender == address(this), "Sender must be this contract");
         require(amount0 > 0 || amount1 > 0, "amount0 or amount1 must be greater than 0");
 
         // 3. decode callback data
+        CallbackData memory callbackData = abi.decode(data, (CallbackData));
         // 4. swap WETH to USDC
+        // transfer first
+        IERC20(callbackData.borrowToken).transfer(callbackData.targetSwapPool, callbackData.borrowAmount);
+        IUniswapV2Pair(callbackData.targetSwapPool).swap(0, callbackData.debtAmountOut, address(this), new bytes(0));
+
         // 5. repay USDC to lower price pool
+        IERC20(callbackData.debtToken).transfer(callbackData.borrowPool, callbackData.debtAmount);
     }
 
     // Method 1 is
@@ -55,9 +60,26 @@ contract Arbitrage is IUniswapV2Callee, Ownable {
     // for testing convenient, we implement the method 1 here
     function arbitrage(address priceLowerPool, address priceHigherPool, uint256 borrowETH) external {
         // 1. finish callbackData
-        // 2. flash swap (borrow WETH from lower price pool)
+        (uint112 lowerPoolReserve0, uint112 lowerPoolReserve1,) = IUniswapV2Pair(priceLowerPool).getReserves();
+        (uint112 higherPoolReserve0, uint112 higherPoolReserve1,) = IUniswapV2Pair(priceHigherPool).getReserves();
 
-        IUniswapV2Pair(priceLowerPool).swap(borrowETH, 0, address(this), abi.encode(callbackData));
+        uint256 debtAmount = _getAmountIn(borrowETH, uint256(lowerPoolReserve1), uint256(lowerPoolReserve0));
+
+        uint256 debtAmountOut = _getAmountOut(borrowETH, uint256(higherPoolReserve0), uint256(higherPoolReserve1));
+
+        bytes memory data = abi.encode(
+            CallbackData({
+                borrowPool: priceLowerPool,
+                targetSwapPool: priceHigherPool,
+                borrowToken: IUniswapV2Pair(priceLowerPool).token0(), // WETH
+                debtToken: IUniswapV2Pair(priceLowerPool).token1(), // USDC
+                borrowAmount: borrowETH,
+                debtAmount: debtAmount, // repay to the lower price pool
+                debtAmountOut: debtAmountOut // amount from the higher price pool
+            })
+        );
+        // 2. flash swap (borrow WETH from lower price pool)
+        IUniswapV2Pair(priceLowerPool).swap(borrowETH, 0, address(this), data);
     }
 
     //
@@ -65,11 +87,11 @@ contract Arbitrage is IUniswapV2Callee, Ownable {
     //
 
     // copy from UniswapV2Library
-    function _getAmountIn(
-        uint256 amountOut,
-        uint256 reserveIn,
-        uint256 reserveOut
-    ) internal pure returns (uint256 amountIn) {
+    function _getAmountIn(uint256 amountOut, uint256 reserveIn, uint256 reserveOut)
+        internal
+        pure
+        returns (uint256 amountIn)
+    {
         require(amountOut > 0, "UniswapV2Library: INSUFFICIENT_OUTPUT_AMOUNT");
         require(reserveIn > 0 && reserveOut > 0, "UniswapV2Library: INSUFFICIENT_LIQUIDITY");
         uint256 numerator = reserveIn * amountOut * 1000;
@@ -78,11 +100,11 @@ contract Arbitrage is IUniswapV2Callee, Ownable {
     }
 
     // copy from UniswapV2Library
-    function _getAmountOut(
-        uint256 amountIn,
-        uint256 reserveIn,
-        uint256 reserveOut
-    ) internal pure returns (uint256 amountOut) {
+    function _getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
+        internal
+        pure
+        returns (uint256 amountOut)
+    {
         require(amountIn > 0, "UniswapV2Library: INSUFFICIENT_INPUT_AMOUNT");
         require(reserveIn > 0 && reserveOut > 0, "UniswapV2Library: INSUFFICIENT_LIQUIDITY");
         uint256 amountInWithFee = amountIn * 997;

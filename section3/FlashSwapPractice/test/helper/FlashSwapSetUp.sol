@@ -2,11 +2,12 @@
 pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
-import { IUniswapV2Factory } from "v2-core/interfaces/IUniswapV2Factory.sol";
-import { IUniswapV2Pair } from "v2-core/interfaces/IUniswapV2Pair.sol";
-import { IUniswapV2Router01 } from "v2-periphery/interfaces/IUniswapV2Router01.sol";
-import { TestWETH9 } from "../../contracts/test/TestWETH9.sol";
-import { TestERC20 } from "../../contracts/test/TestERC20.sol";
+import {IUniswapV2Factory} from "v2-core/interfaces/IUniswapV2Factory.sol";
+import {IUniswapV2Pair} from "v2-core/interfaces/IUniswapV2Pair.sol";
+import {IUniswapV2Router01} from "v2-periphery/interfaces/IUniswapV2Router01.sol";
+import {TestWETH9} from "../../contracts/test/TestWETH9.sol";
+import {TestERC20} from "../../contracts/test/TestERC20.sol";
+import "forge-std/console.sol";
 
 contract FlashSwapSetUp is Test {
     TestWETH9 public weth;
@@ -54,9 +55,8 @@ contract FlashSwapSetUp is Test {
     }
 
     function _create_uniswap_v2_factory() internal returns (IUniswapV2Factory) {
-        string memory path = string(
-            abi.encodePacked(vm.projectRoot(), "/node_modules/@uniswap/v2-core/build/UniswapV2Factory.json")
-        );
+        string memory path =
+            string(abi.encodePacked(vm.projectRoot(), "/node_modules/@uniswap/v2-core/build/UniswapV2Factory.json"));
         string memory artifact = vm.readFile(path);
         bytes memory creationCode = vm.parseBytes(abi.decode(vm.parseJson(artifact, ".bytecode"), (string)));
         creationCode = abi.encodePacked(creationCode, abi.encode(address(0)));

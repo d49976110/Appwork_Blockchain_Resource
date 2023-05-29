@@ -2,9 +2,9 @@
 pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
-import { FlashSwapSetUp } from "./helper/FlashSwapSetUp.sol";
-import { FakeLendingProtocol } from "../contracts/FakeLendingProtocol.sol";
-import { Liquidator } from "../contracts/Liquidator.sol";
+import {FlashSwapSetUp} from "./helper/FlashSwapSetUp.sol";
+import {FakeLendingProtocol} from "../contracts/FakeLendingProtocol.sol";
+import {Liquidator} from "../contracts/Liquidator.sol";
 
 contract FlashSwapPracticeTest is FlashSwapSetUp {
     FakeLendingProtocol fakeLendingProtocol;
@@ -22,13 +22,8 @@ contract FlashSwapPracticeTest is FlashSwapSetUp {
         // maker provide 100 ETH, 10000 USDC to wethUsdcPool
         vm.startPrank(maker);
         usdc.approve(address(uniswapV2Router), 10_000 * 10 ** usdc.decimals());
-        uniswapV2Router.addLiquidityETH{ value: 100 ether }(
-            address(usdc),
-            10_000 * 10 ** usdc.decimals(),
-            0,
-            0,
-            maker,
-            block.timestamp
+        uniswapV2Router.addLiquidityETH{value: 100 ether}(
+            address(usdc), 10_000 * 10 ** usdc.decimals(), 0, 0, maker, block.timestamp
         );
         vm.stopPrank();
 
